@@ -35,10 +35,11 @@ struct Rotation {
 }
 
 impl Rotation {
+    #[must_use]
     fn parse(s: &str) -> Option<Self> {
         let direction = Direction::from_char(s.chars().next()?)?;
         let distance = s.get(1..)?.parse::<i32>().ok()?;
-        Some(Rotation {
+        Some(Self {
             direction,
             distance,
         })
@@ -52,7 +53,7 @@ struct DialState {
 }
 
 impl DialState {
-    fn new(start_pos: i32) -> Self {
+    const fn new(start_pos: i32) -> Self {
         Self {
             position: start_pos,
             rotations: 0,
@@ -87,13 +88,15 @@ impl DialState {
 }
 
 fn solution(input: &str, start_pos: i32) -> i32 {
-    let mut state = DialState::new(start_pos);
-    for rotation in input.trim().split_whitespace() {
-        if let Some(parsed_rotation) = Rotation::parse(rotation) {
-            state.apply_rotation(parsed_rotation);
-        }
-    }
-    state.rotations
+    input
+        .trim()
+        .split_whitespace()
+        .filter_map(Rotation::parse)
+        .fold(DialState::new(start_pos), |mut state, rotation| {
+            state.apply_rotation(rotation);
+            state
+        })
+        .rotations
 }
 
 #[cfg(test)]
