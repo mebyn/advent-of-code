@@ -73,35 +73,46 @@ impl Grid {
         adjacent_cells
     }
 
+    fn remove_rolls(&mut self) -> Option<u64> {
+        let mut removed_rolls = 0;
+        for y in 0..self.height {
+            for x in 0..self.width {
+                let cell = self.rows[y][x];
+                if cell != '@' {
+                    continue;
+                }
+                let cell_neighbors = self.get_cell_neighbors(x, y);
+                let paper_roll_neighbours_size =
+                    cell_neighbors.iter().filter(|&c| *c == '@').count();
+                if paper_roll_neighbours_size < 4 {
+                    removed_rolls += 1;
+                    self.rows[y][x] = '.';
+                }
+            }
+        }
+        (removed_rolls > 0).then_some(removed_rolls)
+    }
+
     fn from_2d_string(input: &str) -> Self {
         let lines = input.trim().lines().collect::<Vec<&str>>();
         Self {
             rows: lines
                 .iter()
-                .map(|line| line.trim().chars().collect::<Vec<char>>())
-                .collect::<Vec<Vec<char>>>(),
+                .map(|line| line.trim().chars().collect())
+                .collect(),
             width: lines.first().unwrap().len(),
             height: lines.len(),
         }
     }
 }
 
-fn solution(input: &str) -> i64 {
-    let grid = Grid::from_2d_string(input);
-    let mut paper_roll_count = 0;
-    for (y, row) in grid.rows.iter().enumerate() {
-        for (x, cell) in row.iter().enumerate() {
-            if *cell != '@' {
-                continue;
-            }
-            let cell_neighbors = grid.get_cell_neighbors(x, y);
-            let paper_roll_neighbours_size = cell_neighbors.iter().filter(|&c| *c == '@').count();
-            if paper_roll_neighbours_size < 4 {
-                paper_roll_count += 1;
-            }
-        }
+fn solution(input: &str) -> u64 {
+    let mut grid = Grid::from_2d_string(input);
+    let mut total_removed_rolls = 0u64;
+    while let Some(removed_rolls) = grid.remove_rolls() {
+        total_removed_rolls += removed_rolls;
     }
-    paper_roll_count
+    total_removed_rolls
 }
 
 #[cfg(test)]
@@ -122,6 +133,6 @@ mod tests {
         .@@@@@@@@.
         @.@.@@@.@.
         ";
-        assert_eq!(solution(input), 13);
+        assert_eq!(solution(input), 43);
     }
 }
