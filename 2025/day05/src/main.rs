@@ -6,10 +6,10 @@ fn main() {
     println!("Day 5: Advent of Code 2025");
     println!("=========================");
     let result_1 = solution_part_1(&input);
-    println!("Result Part 1: {}", result_1);
+    println!("Result Part 1: {}", result_1); //733
 
     let result_2 = solution_part_2(&input);
-    println!("Result Part 2: {}", result_2);
+    println!("Result Part 2: {}", result_2); //345821388687084
 }
 
 #[derive(Debug)]
@@ -54,16 +54,16 @@ impl Inventory {
 
     fn find_all_fresh_ingredients(&self) -> Vec<(u64, u64)> {
         let mut sorted_range_stack = self.ranges.clone();
-        sorted_range_stack.sort_by(|&range1, &range2| range2.0.cmp(&range1.0));
+        sorted_range_stack.sort_by_key(|range| std::cmp::Reverse(range.0));
         let mut bucket: Vec<(u64, u64)> = Vec::new();
-        while !sorted_range_stack.is_empty() {
-            let (_, end) = bucket.last().unwrap_or(&(0, 0));
-            let (next_start, next_end) = sorted_range_stack.pop().unwrap();
-            if *end >= next_start && *end < next_end {
-                let (start, _) = bucket.pop().unwrap();
-                bucket.push((start, next_end));
-            } else if *end < next_start && *end < next_end {
-                bucket.push((next_start, next_end));
+        while let Some((next_start, next_end)) = sorted_range_stack.pop() {
+            match bucket.last_mut() {
+                Some((_, last_end)) if *last_end >= next_start => {
+                    *last_end = (*last_end).max(next_end);
+                }
+                _ => {
+                    bucket.push((next_start, next_end));
+                }
             }
         }
         bucket
@@ -81,7 +81,8 @@ fn solution_part_2(input: &str) -> u64 {
     let fresh_ingredients = inventory.find_all_fresh_ingredients();
     fresh_ingredients
         .iter()
-        .fold(0u64, |acc, (start, end)| (end - start + 1) + acc)
+        .map(|(start, end)| end - start + 1)
+        .sum()
 }
 
 #[cfg(test)]
