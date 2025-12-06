@@ -5,9 +5,11 @@ fn main() {
 
     println!("Day 5: Advent of Code 2025");
     println!("=========================");
+    let result_1 = solution_part_1(&input);
+    println!("Result Part 1: {}", result_1);
 
-    let result = solution(&input);
-    println!("Result: {}", result);
+    let result_2 = solution_part_2(&input);
+    println!("Result Part 2: {}", result_2);
 }
 
 #[derive(Debug)]
@@ -38,7 +40,7 @@ impl Inventory {
         }
     }
 
-    fn find_fresh_ingredients(&self) -> Vec<u64> {
+    fn find_fresh_ingredients_from_stash(&self) -> Vec<u64> {
         self.ingredients
             .iter()
             .filter(|ingredient| {
@@ -49,13 +51,37 @@ impl Inventory {
             .cloned()
             .collect()
     }
+
+    fn find_all_fresh_ingredients(&self) -> Vec<(u64, u64)> {
+        let mut sorted_range_stack = self.ranges.clone();
+        sorted_range_stack.sort_by(|&range1, &range2| range2.0.cmp(&range1.0));
+        let mut bucket: Vec<(u64, u64)> = Vec::new();
+        while !sorted_range_stack.is_empty() {
+            let (_, end) = bucket.last().unwrap_or(&(0, 0));
+            let (next_start, next_end) = sorted_range_stack.pop().unwrap();
+            if *end >= next_start && *end < next_end {
+                let (start, _) = bucket.pop().unwrap();
+                bucket.push((start, next_end));
+            } else if *end < next_start && *end < next_end {
+                bucket.push((next_start, next_end));
+            }
+        }
+        bucket
+    }
 }
 
-fn solution(input: &str) -> u64 {
+fn solution_part_1(input: &str) -> u64 {
     let inventory = Inventory::new(input);
-    let fresh_ingredients = inventory.find_fresh_ingredients();
-    println!("Fresh ingredients: {fresh_ingredients:?}");
+    let fresh_ingredients = inventory.find_fresh_ingredients_from_stash();
     fresh_ingredients.len() as u64
+}
+
+fn solution_part_2(input: &str) -> u64 {
+    let inventory = Inventory::new(input);
+    let fresh_ingredients = inventory.find_all_fresh_ingredients();
+    fresh_ingredients
+        .iter()
+        .fold(0u64, |acc, (start, end)| (end - start + 1) + acc)
 }
 
 #[cfg(test)]
@@ -63,7 +89,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_sample_input() {
+    fn test_solution_part_1() {
         let input = "3-5
         10-14
         16-20
@@ -75,6 +101,22 @@ mod tests {
         11
         17
         32";
-        assert_eq!(solution(input), 3);
+        assert_eq!(solution_part_1(input), 3);
+    }
+
+    #[test]
+    fn test_solution_part_2() {
+        let input = "3-5
+        10-14
+        16-20
+        12-18
+
+        1
+        5
+        8
+        11
+        17
+        32";
+        assert_eq!(solution_part_2(input), 14);
     }
 }
