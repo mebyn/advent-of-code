@@ -19,18 +19,26 @@ impl Problem {
     const ADD: fn(u64, u64) -> u64 = |a: u64, b: u64| a + b;
     const MULTIPLY: fn(u64, u64) -> u64 = |a: u64, b: u64| a * b;
 
+    fn solve(&self) -> u64 {
+        self.numbers
+            .iter()
+            .copied()
+            .reduce(self.operation)
+            .expect("Problem has no numbers to solve")
+    }
+
     fn map_problem<'a>(worksheet: &'a Worksheet<'a>) -> Vec<(Vec<&'a str>, fn(u64, u64) -> u64)> {
         worksheet
             .pivot_grid()
             .iter()
             .map(|problem| {
-                let numbers = problem[..problem.len() - 1].iter().copied().collect();
-                let operation = problem.last().or_else(|| panic!("Invalid operation!"));
+                let numbers = problem[..problem.len() - 1].to_vec();
+                let operation = problem.last().expect("Invalid operation!");
                 (
                     numbers,
-                    match operation {
-                        Some(o) if o.trim() == "*" => Self::MULTIPLY,
-                        Some(o) if o.trim() == "+" => Self::ADD,
+                    match operation.trim() {
+                        "*" => Self::MULTIPLY,
+                        "+" => Self::ADD,
                         _ => panic!("Invalid operation"),
                     },
                 )
@@ -43,7 +51,10 @@ impl Problem {
         problems
             .iter()
             .map(|(numbers, operation)| Problem {
-                numbers: numbers.iter().map(|s| s.parse::<u64>().unwrap()).collect(),
+                numbers: numbers
+                    .iter()
+                    .map(|s| s.parse::<u64>().expect("Invalid number!"))
+                    .collect(),
                 operation: *operation,
             })
             .collect()
@@ -58,30 +69,19 @@ impl Problem {
                 let max_len = numbers
                     .iter()
                     .max_by(|n1, n2| n1.len().cmp(&n2.len()))
-                    .unwrap_or_else(|| panic!("No max len"))
+                    .expect("No max len")
                     .len();
-                let mut column_numbers: Vec<u64> = Vec::new();
-                (0..max_len).rev().for_each(|length| {
-                    let mut numbers = numbers.clone();
-                    let mut column_chars: Vec<char> = Vec::new();
-                    while let Some(number) = numbers.pop() {
-                        let digit = number.chars().nth(length).unwrap_or_else(|| {
-                            panic!("No character! This should not be reachable! 😡")
-                        });
-                        if digit.is_whitespace() {
-                            continue;
-                        }
-                        column_chars.push(digit);
-                    }
-                    column_numbers.push(
-                        column_chars
+                let column_numbers: Vec<u64> = (0..max_len)
+                    .rev()
+                    .map(|length| {
+                        numbers
                             .iter()
-                            .rev()
-                            .collect::<String>()
-                            .parse::<u64>()
-                            .unwrap(),
-                    );
-                });
+                            .map(|s| s.chars().nth(length).expect("No character!"))
+                            .filter(|c| !c.is_whitespace())
+                            .try_fold(0u64, |acc, c| c.to_digit(10).map(|d| acc * 10 + d as u64))
+                            .expect("Found non-digit char")
+                    })
+                    .collect();
                 Problem {
                     numbers: column_numbers,
                     operation: *operation,
@@ -110,15 +110,12 @@ impl<'a> Worksheet<'a> {
     }
 
     fn pivot_grid(&self) -> Vec<Vec<&str>> {
-        let mut numbers: Vec<Vec<&str>> = Vec::new();
-        for x in 0..self.grid[0].len() {
-            let mut row = Vec::new();
-            for y in 0..self.grid.len() {
-                row.push(self.grid[y][x]);
-            }
-            numbers.push(row);
+        if self.grid.is_empty() {
+            return Vec::new();
         }
-        numbers
+        (0..self.grid[0].len())
+            .map(|x| self.grid.iter().map(|row| row[x]).collect())
+            .collect()
     }
 }
 
@@ -127,54 +124,33 @@ fn solution_1(input: &str) -> u64 {
         line.trim().split_whitespace().collect()
     });
     let math_problems = Problem::map_problem_1(&worksheet);
-    math_problems
-        .iter()
-        .map(|problem| {
-            problem
-                .numbers
-                .iter()
-                .copied()
-                .reduce(problem.operation)
-                .unwrap_or(0)
-        })
-        .sum()
+    math_problems.iter().map(|p| p.solve()).sum()
 }
 
 fn solution_2(input: &str) -> u64 {
-    let operations = input
+    let operation_indices = input
         .lines()
         .last()
-        .unwrap_or_else(|| panic!("Invalid input!"));
-    let o_indices = operations
+        .expect("Invalid input!")
         .char_indices()
         .filter(|(_, c)| !c.is_whitespace())
         .map(|(index, _)| index)
         .collect::<Vec<usize>>();
     let worksheet = Worksheet::new(input, |row| {
-        let mut o_indices = o_indices.clone();
-        o_indices.push(row.len() + 1);
+        let mut indices = operation_indices.clone();
+        indices.push(row.len() + 1);
         let mut digits: Vec<&str> = Vec::new();
-        while let Some(split_at) = o_indices.pop()
+        while let Some(split_at) = indices.pop()
             && split_at > 0
         {
-            let next_op = o_indices.last().unwrap_or(&0);
-            let digit_string = &row[*next_op..split_at - 1];
+            let next_index = indices.last().expect("Invalid input!");
+            let digit_string = &row[*next_index..split_at - 1];
             digits.push(digit_string);
         }
         digits
     });
     let math_problems = Problem::map_problem_2(&worksheet);
-    math_problems
-        .iter()
-        .map(|problem| {
-            problem
-                .numbers
-                .iter()
-                .copied()
-                .reduce(problem.operation)
-                .unwrap_or(0)
-        })
-        .sum()
+    math_problems.iter().map(|p| p.solve()).sum()
 }
 
 #[cfg(test)]
