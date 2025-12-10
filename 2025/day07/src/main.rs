@@ -1,4 +1,9 @@
-use std::{collections::HashSet, fs};
+use std::{
+    cell::RefCell,
+    collections::{HashMap, hash_map::Entry},
+    fs,
+    rc::Rc,
+};
 
 fn main() {
     let input = fs::read_to_string("day07/input.txt").expect("Failed to read input file");
@@ -12,62 +17,139 @@ fn main() {
 
 const BEAM_ENTRACE: char = 'S';
 
-fn solution(input: &str) -> i64 {
-    let mut lines = input.trim().lines().rev().collect::<Vec<&str>>();
-    let mut beam_positions: Vec<Vec<usize>> = vec![vec![
-        lines
-            .last()
-            .expect("Invalid input!")
-            .chars()
-            .position(|c| c == BEAM_ENTRACE)
-            .expect("Entrace is missing!"),
-    ]];
-    let mut split_count = 0;
-    while let Some(line) = lines.pop() {
-        let splitters_positions = line
-            .chars()
-            .enumerate()
-            .filter(|(_, c)| *c == '^')
-            .map(|(i, _)| i)
-            .collect::<Vec<usize>>();
-        if splitters_positions.is_empty() {
-            continue;
+type NodeId = (usize, usize);
+type NodeRef = Rc<RefCell<Node>>;
+
+#[derive(Debug)]
+struct Node {
+    id: NodeId,
+    edges: Vec<NodeRef>,
+    has_splitten: bool,
+    is_visited: bool,
+}
+
+#[derive(Debug)]
+struct Tree {
+    nodes: HashMap<NodeId, NodeRef>,
+}
+
+impl Tree {
+    fn new() -> Self {
+        Self {
+            nodes: HashMap::new(),
         }
-        let last_positions = beam_positions
-            .last()
-            .expect("There should at least be an entrance!");
-
-        let mut new_positions = Vec::new();
-        for beam_pos in last_positions {
-            if splitters_positions.contains(beam_pos) {
-                split_count += 1;
-                new_positions.push(beam_pos - 1);
-                new_positions.push(beam_pos + 1);
-            } else {
-                new_positions.push(*beam_pos);
-            }
-
-        }
-        new_positions.sort();
-        new_positions.dedup();
-
-        println!("{}", line);
-        // println!("{:?}", new_positions);
-        (0..line.len()).for_each(|i| {
-            if new_positions.contains(&i) {
-                print!("|");
-            } else {
-                print!(".");
-            }
-        });
-        println!("  >> Split Count: {:?}", split_count);
-
-        if new_positions.is_empty() {
-            continue;
-        }
-        beam_positions.push(new_positions);
     }
-    split_count
+
+    fn add_node(&mut self, id: NodeId) -> NodeRef {
+        let new_node = || {
+            Rc::new(RefCell::new(Node {
+                id,
+                edges: vec![],
+                has_splitten: false,
+                is_visited: false,
+            }))
+        };
+        match self.nodes.entry(id) {
+            Entry::Occupied(o) => o.get().clone(),
+            Entry::Vacant(v) => v.insert(new_node()).clone(),
+        }
+    }
+
+    fn add_edge(&mut self, from: NodeId, to: NodeId) {
+        let parent = self.add_node(from);
+        let child = self.add_node(to);
+        parent.borrow_mut().edges.push(child);
+    }
+
+    fn count_split_occurrence(&self, root: NodeId) -> u64 {
+        fn count_split(tree: &Tree, id: NodeId) -> u64 {
+            let node_ref = match tree.nodes.get(&id) {
+                Some(n) => n,
+                None => return 0,
+            };
+            let mut node = node_ref.borrow_mut();
+            if node.is_visited {
+                return 0;
+            }
+            node.is_visited = true;
+            let mut split_count = node.has_splitten as u64;
+            let child_ids = node
+                .edges
+                .iter()
+                .map(|c| c.borrow().id)
+                .collect::<Vec<(usize, usize)>>();
+            for child_id in child_ids {
+                split_count += count_split(tree, child_id);
+            }
+            split_count
+        }
+        count_split(self, root)
+    }
+}
+
+fn build_tree(grid: &[Vec<char>], start: NodeId) -> Tree {
+    let mut tree = Tree::new();
+    tree.add_node(start);
+
+    let mut current_positions = vec![start]; // positions in current row
+
+    for y in (start.0 + 1)..grid.len() {
+        let mut next = Vec::new();
+        for &(_, x) in &current_positions {
+            let node_in_scope = (y - 1, x);
+            let ch = grid[y][x];
+            match ch {
+                '^' => {
+                    let nis = tree
+                        .nodes
+                        .get(&node_in_scope)
+                        .expect("Unable to find node!");
+                    nis.borrow_mut().has_splitten = true;
+                    if x > 0 {
+                        tree.add_edge(node_in_scope, (y, x - 1));
+                        next.push((y, x - 1));
+                    }
+                    if x + 1 < grid[y].len() {
+                        tree.add_edge(node_in_scope, (y, x + 1));
+                        next.push((y, x + 1));
+                    }
+                }
+                _ => {
+                    tree.add_edge(node_in_scope, (y, x));
+                    next.push((y, x));
+                }
+            }
+        }
+        next.sort();
+        next.dedup();
+        current_positions = next;
+    }
+    tree
+}
+
+fn parse_grid(input: &str) -> (Vec<Vec<char>>, NodeId) {
+    let grid: Vec<Vec<char>> = input
+        .lines()
+        .filter(|l| !l.trim().is_empty())
+        .map(|l| l.chars().collect())
+        .collect();
+
+    let start_row = grid
+        .iter()
+        .position(|row| row.contains(&BEAM_ENTRACE))
+        .expect("missing S");
+    let start_col = grid[start_row]
+        .iter()
+        .position(|c| *c == BEAM_ENTRACE)
+        .unwrap();
+
+    (grid, (start_row, start_col))
+}
+
+fn solution(input: &str) -> u64 {
+    let (grid, start_position) = parse_grid(input);
+    let tree = build_tree(&grid, start_position);
+    tree.count_split_occurrence(start_position)
 }
 
 #[cfg(test)]
